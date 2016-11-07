@@ -16,16 +16,24 @@ template<class T, class hash = std::hash<T>, class pred = std::equal_to<T>>
 class graph {
 
 public:
+
     using node_type = T;
     using hasher = hash;
     using key_equal = pred;
     using size_type = size_t;
 
+	struct traversal {
+
+		const T& antecessor;
+		size_type distance;
+
+	};
+
     using edge_list_type = std::unordered_set<node_type, hasher, key_equal>;
     using node_list_type = std::unordered_map<node_type, edge_list_type, hasher, key_equal>;
 
     using node_count_type = std::unordered_map<node_type, size_type, hasher, key_equal>;
-	//using traversal_type = std::unordered_map<node_type, traversal, hasher, key_equal>;
+	using traversal_type = std::unordered_map<node_type, traversal, hasher, key_equal>;
 
     class const_iterator : public std::iterator<std::forward_iterator_tag, std::pair<node_type, node_type>> {
 
@@ -106,13 +114,6 @@ public:
     
     };
 
-	struct traversal {
-
-		const T& antcessor;
-		size_type distance;
-
-	};
-
 private:
     node_list_type _adjacency;
 
@@ -156,6 +157,10 @@ public:
 		return const_iterator(this, this->_adjacency.end(), edge_list_type::const_iterator());
 	}
 
+	size_t order() const {
+		return this->_adjacency.size();
+	}
+
     const edge_list_type& neighbors(const node_type& node) const {
         return this->_adjacency.at(node);
     }
@@ -184,28 +189,77 @@ public:
 
     }
 
-	//tr.aversal_type breadth_first_search(const node_type& source) const {
+	virtual traversal_type minimum_path(const node_type& source, bool parallel = false) const {
+		return this->breadth_first_search(source, parallel);
+	}
 
-	//	traversal_type retval;
+	traversal_type breadth_first_search(const node_type& source, bool parallel = false) const {
+		return parallel ? this->_breadth_first_search_parallel(source) : this->_breadth_first_search_sequential(source);
+	}
 
-	//	const edge_list_type& neighbors = this->neighbors(source);
-	//	std::queue<node_type> next_nodes(neighbors.cbegin(), neighbors.cend());
+private:
 
-	//	node_type current;
-	//	size_type distance = 1;
+	traversal_type _breadth_first_search_sequential(const node_type& source) const {
 
-	//	while (!next_nodes.empty()) {
+		traversal_type retval;
 
-	//		node_type next = next_nodes.front();
+		std::queue<node_type> to_visit;
+		std::unordered_set<node_type> visited;
 
-	//		// THINK
+		for (const node_type& neighbor : this->neighbors(source)) {
+			retval.emplace(neighbor, traversal { source, 1 });
+			to_visit.push(neighbor);
+		}
+		visited.insert(source);
 
-	//		next_nodes.pop();
+		while (!to_visit.empty()) {
 
+			node_type& current = to_visit.front();
+			to_visit.pop();
 
-	//	}
+			if (visited.count(current)) {
+				continue;
+			}
 
-	//}
+			for (const node_type& neighbor : this->neighbors(current)) {
+
+				if (!retval.count(neighbor)) {
+
+					if (!visited.count(neighbor)) {
+						retval.emplace(neighbor, traversal { this->_adjacency.find(current)->first, retval.at(current).distance + size_type(1) });
+						to_visit.push(neighbor);
+					}
+
+				}
+
+			}
+
+			visited.insert(current);
+
+		}
+
+		return retval;
+
+	}
+
+	traversal_type _breadth_first_search_parallel(const node_type& source) const {
+		throw std::exception("Not implemented yet!"); // TODO
+	}
+
+public:
+
+	double closeness_centrality(const node_type& source, bool parallel = false) const {
+
+		double closeness = 0.0;
+		traversal_type min_paths = this->minimum_path(source, parallel);
+
+		for (const pair<T, traversal>& info : min_paths) {
+			closeness += 1.0 / info.second.distance;
+		}
+
+		return closeness;
+
+	}
 
     void add_node(const node_type& node) {
         this->_adjacency.emplace(node, edge_list_type());
