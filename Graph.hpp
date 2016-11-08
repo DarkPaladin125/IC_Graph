@@ -50,7 +50,7 @@ public:
 
     public:
 
-        explicit const_iterator() : iterating(nullptr) {}
+        explicit const_iterator() : _iterating(nullptr) {}
         const_iterator(const const_iterator& x) = default;
         const_iterator& operator =(const const_iterator& rhs) = default;
 
@@ -64,11 +64,11 @@ public:
 
         const_iterator& operator ++() {
 
-            this->_edge_iterator++;
+            ++this->_edge_iterator;
 
             if (this->_edge_iterator == this->_node_iterator->second.end()) {
 
-                this->_node_iterator++;
+                ++this->_node_iterator;
                 if (this->_node_iterator != this->_iterating->_adjacency.end()) {
                     this->_edge_iterator = this->_node_iterator->second.begin();
                 }
@@ -181,7 +181,7 @@ public:
 
         std::unordered_map<T, size_t, hash, pred> retval;
 
-        for (pair<T, edge_list_type> it : this->_adjacency) {
+        for (std::pair<T, edge_list_type> it : this->_adjacency) {
             retval.emplace(it.first, this->degree(it.first));
         }
 
@@ -253,7 +253,7 @@ public:
 		double closeness = 0.0;
 		traversal_type min_paths = this->minimum_path(source, parallel);
 
-		for (const pair<T, traversal>& info : min_paths) {
+		for (const std::pair<T, traversal>& info : min_paths) {
 			closeness += 1.0 / info.second.distance;
 		}
 

@@ -1,11 +1,13 @@
 #include <iostream>
 #include <string>
 
+#include <Boost/mpi.hpp>
+
 #include "Graph.hpp"
 
 using namespace std;
 
-int main() {
+int main(int argc, char* argv[]) {
 
     graph<int> g = {
 		{2, 6},
@@ -20,7 +22,6 @@ int main() {
 		{1, 5},
 		{8, 9}
 	};
-
 	cout << g.closeness_centrality(1) << endl;
 
     return 0;
