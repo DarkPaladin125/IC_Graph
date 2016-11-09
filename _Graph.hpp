@@ -2,20 +2,19 @@
 
 #include <unordered_map>
 #include <unordered_set>
-#include <deque>
-#include <vector>
+
+#include <queue>
+
 #include <initializer_list>
 #include <iterator>
-#include <utility>
-#include <functional>
 
-#include <boost/mpi.hpp>
-#include <boost/serialization/deque.hpp>
-#include <boost/serialization/unordered_set.hpp>
-#include <boost/serialization/unordered_map.hpp>
+#include <utility>
+
+#include <functional>
 
 template<class T, class hash = std::hash<T>, class pred = std::equal_to<T>>
 class graph {
+
 public:
 
     using node_type = T;
@@ -23,125 +22,18 @@ public:
     using key_equal = pred;
     using size_type = size_t;
 
-private:
+	struct traversal {
 
-	struct traversal_info {
-
-		friend class boost::serialization::access;
-
-		node_type antecessor;
+		const T& antecessor;
 		size_type distance;
 
-		template<class Archive>
-		void serialize(Archive& ar, const unsigned int version) {
-			ar & this->antecessor;
-			ar & this->distance;
-		}
-
 	};
-
-public:
 
     using edge_list_type = std::unordered_set<node_type, hasher, key_equal>;
     using node_list_type = std::unordered_map<node_type, edge_list_type, hasher, key_equal>;
 
     using node_count_type = std::unordered_map<node_type, size_type, hasher, key_equal>;
-
-    using node_set = std::unordered_set<node_type, hasher, key_equal>;
-    template<class Value>
-    using node_map = std::unordered_map<node_type, Value, hasher, key_equal>;
-    
-	using traversal_type = node_map<traversal_info>;
-
-private:
-
-    struct traversal_step {
-
-		friend class boost::serialization::access;
-
-        std::deque<node_type> immediate_visits;
-        std::deque<node_type> future_visits;
-        node_set visited;
-        traversal_type info;
-
-		template<class Archive>
-		void serialize(Archive& ar, const unsigned int version) {
-
-			ar & this->immediate_visits;
-			ar & this->future_visits;
-			ar & this->visited;
-			ar & this->info;
-
-		}
-
-        std::tuple<std::vector<traversal_step>, traversal_step> split(size_type parts) {
-
-            std::vector<traversal_step> retval;
-            size_type payload = this->immediate_visits.size() / parts;
-
-            for (size_type i = size_type(0); i < parts; i++) {
-
-                traversal_step current_step;
-                current_step.visited = this->visited;
-                current_step.info = this->info;
-
-                for (size_type j = size_type(0); j < payload; j++) {
-                    current_step.immediate_visits.push_back(this->immediate_visits.front());
-                    this->immediate_visits.pop_front();
-                }
-
-                retval.push_back(current_step);
-
-            }
-
-            traversal_step remaining;
-            remaining.visited = this->visited;
-            remaining.info = this->info;
-            while (!this->immediate_visits.empty()) {
-                remaining.immediate_visits.push_back(this->immediate_visits.front());
-                this->immediate_visits.pop_front();
-            }
-
-            return std::make_tuple(retval, remaining);
-
-        }
-
-        static traversal_step merge(std::vector<traversal_step>& steps) {
-
-            traversal_step retval;
-
-            for (traversal_step& step : steps) {
-                retval.merge(step);
-            }
-
-			return retval;
-
-        }
-
-        void merge(traversal_step& step) {
-
-            while (!step.future_visits.empty()) {
-                this->immediate_visits.push_back(step.future_visits.front());
-                step.future_visits.pop_front();
-            }
-
-            for (const node_type& v : step.visited) {
-                this->visited.insert(v);
-            }
-
-            for (const std::pair<node_type, traversal_info>& i : step.info) {
-
-                if (!this->info.count(i.first)) {
-                    this->info.insert(i);
-                }
-
-            }
-
-        }
-
-    };
-
-public:
+	using traversal_type = std::unordered_map<node_type, traversal, hasher, key_equal>;
 
     class const_iterator : public std::iterator<std::forward_iterator_tag, std::pair<node_type, node_type>> {
 
@@ -223,7 +115,6 @@ public:
     };
 
 private:
-
     node_list_type _adjacency;
 
 public:
@@ -312,19 +203,19 @@ private:
 
 		traversal_type retval;
 
+		std::queue<node_type> to_visit;
 		std::unordered_set<node_type> visited;
-		std::deque<node_type> to_visit;
 
 		for (const node_type& neighbor : this->neighbors(source)) {
-			retval.emplace(neighbor, traversal_info {source, 1});
-			to_visit.push_back(neighbor);
+			retval.emplace(neighbor, traversal { source, 1 });
+			to_visit.push(neighbor);
 		}
 		visited.insert(source);
 
 		while (!to_visit.empty()) {
 
 			node_type& current = to_visit.front();
-			to_visit.pop_front();
+			to_visit.pop();
 
 			if (visited.count(current)) {
 				continue;
@@ -335,8 +226,8 @@ private:
 				if (!retval.count(neighbor)) {
 
 					if (!visited.count(neighbor)) {
-						retval.emplace(neighbor, traversal_info {this->_adjacency.find(current)->first, retval.at(current).distance + size_type(1)});
-						to_visit.push_back(neighbor);
+						retval.emplace(neighbor, traversal { this->_adjacency.find(current)->first, retval.at(current).distance + size_type(1) });
+						to_visit.push(neighbor);
 					}
 
 				}
@@ -352,76 +243,8 @@ private:
 	}
 
 	traversal_type _breadth_first_search_parallel(const node_type& source) const {
-
-        traversal_step retval;
-
-        for (const node_type& neighbor : this->neighbors(source)) {
-            retval.info.emplace(neighbor, traversal_info {source, 1});
-            retval.immediate_visits.push_back(neighbor);
-        }
-        retval.visited.insert(source);
-
-        std::vector<traversal_step> global;
-        traversal_step remaining;
-        std::vector<traversal_step> result;
-
-        boost::mpi::environment env;
-        boost::mpi::communicator world;
-        bool master = world.rank() == 0;
-
-        while (!retval.immediate_visits.empty()) {
-
-            std::tie(global, remaining) = retval.split(world.size());
-
-            traversal_step local;
-
-            boost::mpi::scatter(world, global, local, 0);
-            this->_bfs_visit_neighbors(local);
-            
-            if (master) {
-                this->_bfs_visit_neighbors(remaining);
-            }
-
-            boost::mpi::gather(world, local, result, 0);
-            retval = traversal_step::merge(result);
-
-            if (master) {
-                retval.merge(remaining);
-            }
-
-        }
-
-        return retval.info;
-
+		throw std::exception("Not implemented yet!"); // TODO
 	}
-
-    void _bfs_visit_neighbors(traversal_step& step) const {
-        
-        while (!step.immediate_visits.empty()) {
-
-			node_type& current = step.immediate_visits.front();
-			step.immediate_visits.pop_front();
-
-			if (step.visited.count(current)) {
-				continue;
-			}
-
-			for (const node_type& neighbor : this->neighbors(current)) {
-
-				if (!step.info.count(neighbor) && !step.visited.count(neighbor)) {
-
-                    step.info.emplace(neighbor, traversal_info {this->_adjacency.find(current)->first, step.info.at(current).distance + size_type(1)});
-                    step.future_visits.push_back(neighbor);
-
-				}
-
-			}
-
-			step.visited.insert(current);
-
-		}
-
-    }
 
 public:
 
@@ -430,7 +253,7 @@ public:
 		double closeness = 0.0;
 		traversal_type min_paths = this->minimum_path(source, parallel);
 
-		for (const std::pair<T, traversal_info>& info : min_paths) {
+		for (const std::pair<T, traversal>& info : min_paths) {
 			closeness += 1.0 / info.second.distance;
 		}
 
