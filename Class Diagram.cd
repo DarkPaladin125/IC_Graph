@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1" MembersFormat="FullSignature">
+  <Class Name="graph&lt;T, hash, pred&gt;">
+    <Position X="0.5" Y="0.5" Width="5" />
+    <Compartments>
+      <Compartment Name="Nested Types" Collapsed="false" />
+    </Compartments>
+    <NestedTypes>
+      <Struct Name="graph&lt;T, hash, pred&gt;::traversal_info">
+        <TypeIdentifier>
+          <NewMemberFileName>Graph.hpp</NewMemberFileName>
+        </TypeIdentifier>
+      </Struct>
+      <Struct Name="graph&lt;T, hash, pred&gt;::traversal_step">
+        <TypeIdentifier>
+          <NewMemberFileName>Graph.hpp</NewMemberFileName>
+        </TypeIdentifier>
+      </Struct>
+      <Class Name="graph&lt;T, hash, pred&gt;::const_iterator">
+        <TypeIdentifier>
+          <NewMemberFileName>Graph.hpp</NewMemberFileName>
+        </TypeIdentifier>
+      </Class>
+      <Class Name="graph&lt;T, hash, pred&gt;::iterator">
+        <TypeIdentifier>
+          <NewMemberFileName>Graph.hpp</NewMemberFileName>
+        </TypeIdentifier>
+      </Class>
+    </NestedTypes>
+    <TypeIdentifier>
+      <HashCode>AAACAAADAAiAAABAAIgAAAAQCIEiEAAACAAAIgAAACA=</HashCode>
+      <FileName>Graph.hpp</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Font Name="Segoe UI" Size="9" />
+</ClassDiagram>

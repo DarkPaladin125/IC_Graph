@@ -3,23 +3,7 @@
 
 #include "Graph.hpp"
 
-#include <boost/serialization/queue.hpp>
-
 using namespace std;
-
-class whatever
-{
-	std::queue<int> member;
-	friend class boost::serialization::access;
-
-	template<class Archive>
-	void serialize(Archive& ar, const unsigned int version)
-	{
-		ar & this->member;
-	}
-
-
-};
 
 int main(int argc, char* argv[]) {
 

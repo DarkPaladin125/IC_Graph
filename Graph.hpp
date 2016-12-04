@@ -20,7 +20,7 @@ public:
 
     using node_type = T;
     using hasher = hash;
-    using key_equal = pred;
+    using node_equal = pred;
     using size_type = size_t;
 
 private:
@@ -42,14 +42,14 @@ private:
 
 public:
 
-    using edge_list_type = std::unordered_set<node_type, hasher, key_equal>;
-    using node_list_type = std::unordered_map<node_type, edge_list_type, hasher, key_equal>;
+    using edge_list_type = std::unordered_set<node_type, hasher, node_equal>;
+    using node_list_type = std::unordered_map<node_type, edge_list_type, hasher, node_equal>;
 
-    using node_count_type = std::unordered_map<node_type, size_type, hasher, key_equal>;
-
-    using node_set = std::unordered_set<node_type, hasher, key_equal>;
+    using node_set = std::unordered_set<node_type, hasher, node_equal>;
     template<class Value>
-    using node_map = std::unordered_map<node_type, Value, hasher, key_equal>;
+    using node_map = std::unordered_map<node_type, Value, hasher, node_equal>;
+
+	using node_count_type = node_map<size_type>;
     
 	using traversal_type = node_map<traversal_info>;
 
@@ -229,8 +229,11 @@ private:
 public:
 
     explicit graph() = default;
+
     graph(const node_list_type& x) : _adjacency(x) {}
+	graph(const graph& x) = default;
     graph(node_list_type&& x) : _adjacency(x) {}
+	graph(graph&& x) = default;
 
     graph(std::initializer_list<std::pair<node_type, node_type>> il) {
 
@@ -266,8 +269,19 @@ public:
 		return const_iterator(this, this->_adjacency.end(), edge_list_type::const_iterator());
 	}
 
-	size_t order() const {
+	size_type order() const {
 		return this->_adjacency.size();
+	}
+
+	size_type size() const {
+
+		size_type retval = 0;
+		for (const edge_list_type& edges : this->_adjacency) {
+			retval += edges.size();
+		}
+
+		return retval;
+
 	}
 
     const edge_list_type& neighbors(const node_type& node) const {
