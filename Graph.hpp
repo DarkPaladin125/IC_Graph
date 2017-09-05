@@ -362,57 +362,113 @@ public:
 
 private:
 
+	// The adjacency info.
     node_list_type _adjacency;
 
 public:
 
+	// All constructors have to build a single member only.
+	// The default implementations for most constructors are fine on
+	// what they should do, and the non-default ones can be simply
+	// solved by delegating the construction its member.
+	// Therefore, there is no reason not to use it.
+
+	// Default constructor:
+	// Creates an empty graph (no vertices nor edges).
     explicit graph() = default;
 
-    graph(const node_list_type& x) : _adjacency(x) {}
+	// Copy constructor:
+	// Creates a graph from another, by cloning its adjacency info.
 	graph(const graph& x) = default;
-    graph(node_list_type&& x) : _adjacency(x) {}
+
+	// Move constructor:
+	// Creates a graph from another, by moving its adjacency info.
 	graph(graph&& x) = default;
 
+	// Constructor:
+	// Creates a graph with the supplied adjacency info, containing vertices and edges.
+    graph(const node_list_type& x) : _adjacency(x) {}
+
+	// Constructor:
+	// Creates a graph with the supplied adjacency info, containing vertices and edges.
+    graph(node_list_type&& x) : _adjacency(x) {}
+
+	// Constructor:
+	// Creates a graph with its adjacency info supplied as an intializer info, thus allwoing uniform initiaization.
     graph(std::initializer_list<std::pair<node_type, node_type>> il) {
 
+		// For each pair present in the initializer list:
         for (auto e : il) {
 
+			// Adds the one node, if still not in the graph;
             if (!this->_adjacency.count(e.first)) {
                 this->add_node(e.first);
             }
 
+			// Adds the other one, if still not in the graph;
             if (!this->_adjacency.count(e.second)) {
                 this->add_node(e.second);
             }
 
+			// With both guranteed to be in the graph, creates the
+			// edge between them.
             this->add_edge(e.first, e.second);
 
         }
 
     }
 
+	// begin member function:
+	// Gets an iterator to start iterating from it.
+	// Returns:
+	//   Iterator to the beginning of this container (in valid state).
     iterator begin() {
         return iterator(this, this->_adjacency.begin(), this->_adjacency.begin()->second.begin());
     }
 
+	// end member function:
+	// Gets an iterator that indicates end of iteration.
+	// Returns:
+	//   Iterator past the end of this container (in invalid state).
     iterator end() {
 		return iterator(this, this->_adjacency.end(), edge_list_type::iterator());
     }
 
+	// cbegin member function:
+	// Gets a constant iterator to start iterating from it.
+	// Returns:
+	//   Constant iterator to the beginning of this container (in valid state).
 	const_iterator cbegin() {
 		return const_iterator(this, this->_adjacency.begin(), this->_adjacency.begin()->second.begin());
 	}
 
+	// cend member function:
+	// Gets an iterator that indicates end of iteration.
+	// Returns:
+	//   Constant iterator past the end of this container (in invalid state).
 	const_iterator cend() {
 		return const_iterator(this, this->_adjacency.end(), edge_list_type::const_iterator());
 	}
 
+	// order member function:
+	// Gets the order of the graph, i.e., number of vertices / nodes.
+	// Returns:
+	//    Graph order.
 	size_type order() const {
+		// Since the adjacency info structure stores one set
+		// of linked nodes per node, the number size of it
+		// is the total number of nodes in the graph.
 		return this->_adjacency.size();
 	}
 
+	// size member function:
+	// Gets the size of the graph, i.e., the number of edges / links;
+	// Returns:
+	//   Graph size.
 	size_type size() const {
 
+		// The size of the graph is the sum of the sizes
+		// of each node's own adjacency list.
 		size_type retval = 0;
 		for (const edge_list_type& edges : this->_adjacency) {
 			retval += edges.size();
@@ -422,22 +478,51 @@ public:
 
 	}
 
+	// neighbors member function:
+	// Gets the neighbors of a node, i.e., the nodes that are linked to a specific node.
+	// Parameters:
+	// * node: the node whose neighbors will be gotten;
+	// Returns:
+	//   The neighbors of argument node.
     const edge_list_type& neighbors(const node_type& node) const {
+		// "at" is preferred over [], because the former throws an
+		// exception (that will be automatically rethrown), and
+		// because it can be used in a method labeled with "const".
         return this->_adjacency.at(node);
     }
 
+	// operator []:
+	// Gets the neighbors of a node, i.e., the nodes that are linked to a specific node.
+	// Parameters:
+	// * node: the node whose neighbors will be gotten;
+	// Returns:
+	//   The neighbors of argument node.
     inline const edge_list_type& operator [](const node_type& node) const {
         return this->neighbors(node);
     }
 
+	// neighbors member function:
+	// Gets the neighbors of all nodes, which, is none more than the adjacency info itself.
+	// Returns:
+	//   Adjacency / neighboring info.
     const node_list_type& neighbors() const {
         return this->_adjacency;
     }
 
+	// degree member function:
+	// Gets the degree of a node, i.e., the number of links connected to that node.
+	// Parameters:
+	// * node: the node whose degree will be calculated;
+	// Returns:
+	//   The degree of argument node.
     size_type degree(const node_type& node) const {
         return this->_adjacency.at(node).size();
     }
 
+	// degree member function:
+	// Gets the degrees of all nodes in a mapping.
+	// Returns:
+	//   Mapping, in which the nodes are keys, and the values, the degrees.
     node_count_type degree() const {
 
         std::unordered_map<T, size_t, hash, pred> retval;
@@ -450,10 +535,25 @@ public:
 
     }
 
+	// minimum_path member function
+	// Calculates the minimum path from a source to all other nodes, i.e.,
+	// how to traverse starting from one node targeting every other, while traversing the least links possible.
+	// Parameters:
+	// * source: the source of the traversal;
+	// * parallel: whether the traversal should be done in parallel or not (defaults to false).
+	// Returns:
+	//   Traversal info filled with the minimum paths.
 	virtual traversal_type minimum_path(const node_type& source, bool parallel = false) const {
 		return this->breadth_first_search(source, parallel);
 	}
 
+	// minimum_path member function
+	// Performs the Breadth First Search (BFS) traversal algorithm.
+	// Parameters:
+	// * source: the source of the traversal;
+	// * parallel: whether the traversal should be done in parallel or not (defaults to "no").
+	// Returns:
+	//   Traversal info filled with the minimum paths.
 	traversal_type breadth_first_search(const node_type& source, bool parallel = false) const {
 		return parallel ? this->_breadth_first_search_parallel(source) : this->_breadth_first_search_sequential(source);
 	}
@@ -577,6 +677,13 @@ private:
 
 public:
 
+	// closness_centrality member function:
+	// Calculates the closeness centrality of a node.
+	// Parameters:
+	// * source: the node whose closeness centrality will be calculated;
+	// * parallel: whether the calculation should done in parallel or not (defaults to "no").
+	// Returns:
+	//   Closeness centrality value.
 	double closeness_centrality(const node_type& source, bool parallel = false) const {
 
 		double closeness = 0.0;
@@ -590,10 +697,20 @@ public:
 
 	}
 
+	// add_node member function:
+	// Adds a node to the graph.
+	// Parameters:
+	// * node: the node to be added.
     void add_node(const node_type& node) {
         this->_adjacency.emplace(node, edge_list_type());
     }
 
+	// add_edge member function:
+	// Adds an edge between to already existant nodes to the graph.
+	// Since the graph is undirected, it does not matter who is the source,and who is the destination.
+	// Parameters:
+	// * source: the one end of the edge;
+	// * destination: the other end of the edge.
     void add_edge(const node_type& source, const node_type& destination) {
         this->_adjacency.at(source).insert(destination);
         this->_adjacency.at(destination).insert(source);
