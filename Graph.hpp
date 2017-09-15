@@ -1,3 +1,8 @@
+/*
+ Author: Sady Sell Neto
+ Copyright (C) 2016-2017
+*/
+
 #pragma once
 
 #include <unordered_map>
@@ -400,12 +405,12 @@ public:
     // For each pair present in the initializer list:
     for (auto e : il) {
 
-      // Adds the one node, if still not in the graph;
+      // Adds the one node, if still not in the graph.
       if (!this->_adjacency.count(e.first)) {
         this->add_node(e.first);
       }
 
-      // Adds the other one, if still not in the graph;
+      // Adds the other one, if still not in the graph.
       if (!this->_adjacency.count(e.second)) {
         this->add_node(e.second);
       }
@@ -527,6 +532,8 @@ public:
 
     std::unordered_map<T, size_t, hash, pred> retval;
 
+    // Calculates for each node its degree
+    // and saves it on the mapping.
     for (std::pair<T, edge_list_type> it : this->_adjacency) {
       retval.emplace(it.first, this->degree(it.first));
     }
@@ -549,6 +556,7 @@ public:
 
   // minimum_path member function
   // Performs the Breadth First Search (BFS) traversal algorithm.
+  // It is a wrapper for calling private methods that do the traversal itself.
   // Parameters:
   // * source: the source of the traversal;
   // * parallel: whether the traversal should be done in parallel or not (defaults to "no").
@@ -560,34 +568,76 @@ public:
 
 private:
 
+  // _breadth_first_search_sequential member function:
+  // Performs the Breadth First Search (BFS) traversal algorithm sequentially.
+  // It is called by breadth_first_search, and is responsible for the traversal itself.
+  // Parameters:
+  // * source: the source of the traversal;
+  // Returns:
+  //   Traversal info filled with the minimum paths.
   traversal_type _breadth_first_search_sequential(const node_type& source) const {
 
+    // The traversal result.
     traversal_type retval;
-
+    // All nodes visited so far.
     std::unordered_set<node_type> visited;
+    // Queue of nodes to be visited.
+    // (Unlike the parallel version, this one can use a signle queue, since there are no synchronization barriers.)
+    // (A deque is used over a queue in this case to maintain uniformity.)
     std::deque<node_type> to_visit;
 
+    // Starts by visiting the neighbors of the source.
     for (const node_type& neighbor : this->neighbors(source)) {
+      // These nodes have a distance of a single edge,
+      // and they are reached by the source, making it their
+      // antecessor.
       retval.emplace(neighbor, traversal_info { source, 1 });
+      // The algorithm can then resume the traversal by visiting
+      // those nodes, thus putting them in the queue of nodes to
+      // be visited.
       to_visit.push_back(neighbor);
     }
+    // Since the algorithm starts with the source, after this step
+    // it will have just become visited.
     visited.insert(source);
 
+    // While there are still nodes left to visit:
     while (!to_visit.empty()) {
 
+      // Takes the first node out of the queue to analyze it.
       node_type& current = to_visit.front();
       to_visit.pop_front();
 
+      // If the this node has already been visited, there
+      // is no need to repeat the visit operation.
       if (visited.count(current)) {
         continue;
       }
 
+      // For each neighbor of the node:
       for (const node_type& neighbor : this->neighbors(current)) {
 
+        // The info about that node may have been already calculated,
+        // but it may have not been visited yet. If that's case,
+        // there is no need for further calculations (for this
+        // neighbor only). Otherwise, i.e., if it hasn't been
+        // calculated yet:
         if (!retval.count(neighbor)) {
 
+          // If the node has already been visited, there is no need
+          // to visit it again. Otherwise, i.e., if it hasn't been
+          // visited yet:
           if (!visited.count(neighbor)) {
+
+            // The algorithm is visiting this node through the
+            // current one, thus making the latter antecessor of the
+            // former.
+            // The distance up to current node is already known,
+            // and since this one is one edge away from the current,
+            // the distance to the latter is the distance to the
+            // former plus one.
             retval.emplace(neighbor, traversal_info{ this->_adjacency.find(current)->first, retval.at(current).distance + size_type(1) });
+            // This neighbor now needs to be visited.
             to_visit.push_back(neighbor);
           }
 
@@ -595,80 +645,168 @@ private:
 
       }
 
+      // After the algoritm has resolved for all neighbors of the
+      // current node, it is now done and ready to go the next
+      // one. Therefore, the current node has been fully visited.
       visited.insert(current);
 
     }
 
+    // The algorithm is done and the result can be returned.
     return retval;
 
   }
 
+  // _breadth_first_search_parallel member function:
+  // Performs the Breadth First Search (BFS) traversal algorithm paralelly.
+  // It is called by breadth_first_search, and is responsible for the traversal itself.
+  // Parameters:
+  // * source: the source of the traversal;
+  // Returns:
+  //   Traversal info filled with the minimum paths.
   traversal_type _breadth_first_search_parallel(const node_type& source) const {
 
+    // The traversal result.
+    // (It is stored as step; on the last step, the traversal info stored is the result itself.)
     traversal_step retval;
 
+    // Starts by visiting the neighbors of the source.
+    // (This particular visit is done sequentially.)
     for (const node_type& neighbor : this->neighbors(source)) {
+      // These nodes have a distance of a single edge,
+      // and they are reached by the source, making it their
+      // antecessor.
       retval.info.emplace(neighbor, traversal_info { source, 1 });
+      // The algorithm can then resume the traversal by visiting
+      // those nodes, thus putting them in the queue of nodes to
+      // be visited.
       retval.immediate_visits.push_back(neighbor);
     }
+    // Since the algorithm starts with the source, after this step
+    // it will have just become visited.
     retval.visited.insert(source);
 
+    // The work that will be scatter'd
+    // (each position is a task one worker will perform).
     std::vector<traversal_step> global;
+    // The amount of work that couldn't be equally splitted.
     traversal_step remaining;
+    // The result of each task after the gather operation.
+    // (each position is one complete task).
     std::vector<traversal_step> result;
 
+    // Starts the MPI environment by declaring the
+    // environment itself and the standard communicator
+    // (no need to use another).
     boost::mpi::environment env;
     boost::mpi::communicator world;
+
+    // Flag that indicates if current worker is the master.
     bool master = world.rank() == 0;
 
+    // While there are still nodes left to visit:
     while (!retval.immediate_visits.empty()) {
 
+      // Splits the work between the workers and assigns
+      // it to the work that will be scatter'd and
+      // separates the remaining work (the amount that
+      // couldn't be equally split).
       std::tie(global, remaining) = retval.split(world.size());
 
+      // The local work each worker will have.
       traversal_step local;
 
+      // Perform the scatter operation on the world (main and only)
+      // communicator.
+      // The master (0) will scatter the work contained in the
+      // "global" variable; each position will be assigned to the
+      // "local" variable for each worker.
       boost::mpi::scatter(world, global, local, 0);
+
+      // Each worker process then perform the heart of the algorithm,
+      // which is the traversal to the neighbors.
       this->_bfs_visit_neighbors(local);
 
+      // The master will be also responsible for the remaining
+      // work, since it wastes no time on network communication.
       if (master) {
         this->_bfs_visit_neighbors(remaining);
       }
 
+      // After each worker finish its task, performs the gather
+      // operation.
+      // Each resulting task (stored in the "local" variable)
+      // will be gather'd into a position of the "result" variable
+      // in the master (0).
       boost::mpi::gather(world, local, result, 0);
+      // The result is then merged into a single object,
+      // and the info stored so far, updated.
       retval = traversal_step::merge(result);
 
+      // The master still needs to merge the remaining amount.
       if (master) {
         retval.merge(remaining);
       }
 
     }
 
+    // After the algorithm is done, the last step contains
+    // the result info, which is returned.
     return retval.info;
 
   }
 
+  // _bfs_visit_neighbors member function:
+  // Perform the traversal from a node to its neighbors.
+  // Parameters:
+  // * step: information about the traversal concerning one particular node
+  //   (the function modifies the argument for this parameter instead of returning the result;
+  //   this is done due to performance reasons).
   void _bfs_visit_neighbors(traversal_step& step) const {
 
+    // While there are still nodes left to visit:
     while (!step.immediate_visits.empty()) {
 
+      // Takes the first node out of the queue to analyze it.
       node_type& current = step.immediate_visits.front();
       step.immediate_visits.pop_front();
 
+      // If the this node has already been visited, there
+      // is no need to repeat the visit operation.
       if (step.visited.count(current)) {
         continue;
       }
 
+      // For each neighbor of the node:
       for (const node_type& neighbor : this->neighbors(current)) {
 
+        // The info about that node may have been already calculated,
+        // but it may have not been visited yet. If that's case,
+        // there is no need for further calculations (for this
+        // neighbor only). Otherwise, i.e., if it hasn't been
+        // calculated yet and if the node has already been visited,
+        // there is no need to visit it again. Otherwise, i.e., if it
+        // hasn't been visited yet:
         if (!step.info.count(neighbor) && !step.visited.count(neighbor)) {
 
+          // The algorithm is visiting this node through the
+          // current one, thus making the latter antecessor of the
+          // former.
+          // The distance up to current node is already known,
+          // and since this one is one edge away from the current,
+          // the distance to the latter is the distance to the
+          // former plus one.
           step.info.emplace(neighbor, traversal_info{ this->_adjacency.find(current)->first, step.info.at(current).distance + size_type(1) });
+          // This neighbor now needs to be visited.
           step.future_visits.push_back(neighbor);
 
         }
 
       }
 
+      // After the algoritm has resolved for all neighbors of the
+      // current node, it is now done and ready to go the next
+      // one. Therefore, the current node has been fully visited.
       step.visited.insert(current);
 
     }
@@ -687,8 +825,13 @@ public:
   double closeness_centrality(const node_type& source, bool parallel = false) const {
 
     double closeness = 0.0;
+
+    // The closeness centrality is based on the shortest distances,
+    // thus having to calculate it.
     traversal_type min_paths = this->minimum_path(source, parallel);
 
+    // The closeness centrality is the sum of the inverse of the
+    // shortest distances.
     for (const std::pair<T, traversal_info>& info : min_paths) {
       closeness += 1.0 / info.second.distance;
     }
@@ -712,7 +855,9 @@ public:
   // * source: the one end of the edge;
   // * destination: the other end of the edge.
   void add_edge(const node_type& source, const node_type& destination) {
+    // Since the graph is undirected, adds an edge in one direction...
     this->_adjacency.at(source).insert(destination);
+    // ...and another in the other one.
     this->_adjacency.at(destination).insert(source);
   }
 
